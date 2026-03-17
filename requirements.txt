@@ -1,0 +1,7 @@
+faster-whisper
+sentence-transformers
+librosa
+numpy
+scikit-learn
+imageio-ffmpeg
+groq
