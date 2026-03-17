@@ -14,6 +14,8 @@ from pathlib import Path
 from config import Config
 from pipeline.transcriber import Segment
 
+from dotenv import load_dotenv
+load_dotenv()
 
 def transcribe_groq(audio_path: str, config: Config) -> list[Segment]:
     """Transcribe using Groq's Whisper API."""

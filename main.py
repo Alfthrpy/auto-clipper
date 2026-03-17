@@ -79,6 +79,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Groq API key (or set GROQ_API_KEY env var). Only needed for --backend groq.",
     )
+    p.add_argument(
+        "--scoring", "-s",
+        type=str,
+        default="fused",
+        choices=["tfidf", "audio", "fused"],
+        help="Scoring mode: tfidf (text-only), audio (energy/pitch), fused (both). Default: fused.",
+    )
+    p.add_argument(
+        "--audio-weight",
+        type=float,
+        default=0.5,
+        help="Audio weight in fused mode (0.0=all text, 1.0=all audio). Default: 0.5.",
+    )
     return p
 
 
@@ -99,6 +112,8 @@ def main():
         whisper_model=args.model,
         whisper_device=args.device,
         language=args.language,
+        scoring_mode=args.scoring,
+        audio_weight=args.audio_weight,
         top_k=args.top,
         output_dir=args.output,
         cache_dir=args.cache_dir,
@@ -112,6 +127,9 @@ def main():
     if config.transcribe_backend == "local":
         print(f"  Model  : {config.whisper_model}")
         print(f"  Device : {config.whisper_device}")
+    print(f"  Scoring: {config.scoring_mode}")
+    if config.scoring_mode == "fused":
+        print(f"  Weights: text={1 - config.audio_weight:.0%} / audio={config.audio_weight:.0%}")
     print(f"  Top-K  : {config.top_k}")
     print(f"  Cache  : {config.cache_dir}/")
     print(f"  Output : {config.output_dir}/")
@@ -123,8 +141,28 @@ def main():
     audio_path = config.temp_dir / f"{video_path.stem}.wav"
     extract_audio(video_path, audio_path)
 
-    # ── Step 2: Transcribe ─────────────────────────────────────
-    segments = transcribe(str(audio_path), config)
+    # ── Step 2: Transcribe (with caching) ──────────────────────
+    import json
+    from pipeline.transcriber import Segment
+
+    cache_name = f"{video_path.stem}_{config.transcribe_backend}_{config.whisper_model}_{config.language or 'auto'}.json"
+    cache_file = config.temp_dir / cache_name
+
+    if cache_file.exists():
+        print(f"[transcribe] ♻️ Loading cached transcript from {cache_file.name}")
+        with open(cache_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            segments = [Segment(**d) for d in data]
+    else:
+        segments = transcribe(str(audio_path), config)
+        print(segments)
+        if segments:
+            # Safely serialize dataclass to dict
+            seg_dicts = [{"start": s.start, "end": s.end, "text": s.text} for s in segments]
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(seg_dicts, f, indent=2, ensure_ascii=False)
+            print(f"[transcribe] 💾 Saved transcript cache to {cache_file.name}")
+
     if not segments:
         print("No speech detected in the video. Exiting.")
         sys.exit(0)
@@ -138,16 +176,18 @@ def main():
     # Print chunks for visibility
     print("\n── Transcript Chunks ─────────────────────────────────")
     for i, c in enumerate(chunks, 1):
-        preview = c.text[:80] + "..." if len(c.text) > 80 else c.text
+        clean_text = c.text.replace('\n', ' ').replace('\r', '')
+        preview = clean_text[:80] + "..." if len(clean_text) > 80 else clean_text
         print(f"  {i:2d}. [{c.start:6.1f}s → {c.end:6.1f}s] {preview}")
 
     # ── Step 4: Score ──────────────────────────────────────────
-    scored = score_chunks(chunks)
+    scored = score_chunks(chunks, config, audio_path=str(audio_path))
 
     print("\n── Highlight Scores ──────────────────────────────────")
     for i, sc in enumerate(scored, 1):
         marker = " ★" if i <= config.top_k else ""
-        preview = sc.chunk.text[:60] + "..." if len(sc.chunk.text) > 60 else sc.chunk.text
+        clean_text = sc.chunk.text.replace('\n', ' ').replace('\r', '')
+        preview = clean_text[:60] + "..." if len(clean_text) > 60 else clean_text
         print(f"  {i:2d}. score={sc.score:.3f}  "
               f"[{sc.chunk.start:6.1f}s → {sc.chunk.end:6.1f}s]{marker}  {preview}")
 
