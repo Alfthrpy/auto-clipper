@@ -8,3 +8,6 @@ video-testing
 .vscode
 *.mp4
 *.wav
+
+client_secrets.json
+token.json

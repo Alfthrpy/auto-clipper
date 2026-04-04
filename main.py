@@ -179,17 +179,16 @@ def main():
         print(f"Error: video file not found: {video_path}")
         sys.exit(1)
 
-    # Configure
     config = Config(
         transcribe_backend=args.backend,
         groq_api_key=args.groq_api_key,
         whisper_model=args.model,
         whisper_device=args.device,
-        language=args.language,
         scoring_mode=args.scoring,
         audio_weight=args.audio_weight,
         top_k=args.top,
-        output_dir=args.output,
+        language=args.language,
+        output_dir=Path(args.output),
         cache_dir=args.cache_dir,
         render_enabled=not args.no_render,
         render_preset=args.render_preset,
@@ -208,7 +207,7 @@ def main():
         print(f"  Model  : {config.whisper_model}")
         print(f"  Device : {config.whisper_device}")
     print(f"  Scoring: {config.scoring_mode}")
-    if config.scoring_mode == "fused":
+    if config.scoring_mode in ["fused", "audio", "tfidf"]:
         print(f"  Weights: text={1 - config.audio_weight:.0%} / audio={config.audio_weight:.0%}")
     print(f"  Top-K  : {config.top_k}")
     print(f"  Render : {render_label}")
@@ -297,6 +296,7 @@ def main():
                 )
 
             # 6b. Generate Hook Text & Voice (if enabled)
+            hook_text = None
             hook_audio_file = None
             hook_subtitle_file = None
             if config.hook_enabled:
@@ -330,6 +330,19 @@ def main():
                 hook_audio_file, hook_subtitle_file
             )
             output_files.append(out_path)
+            
+            # 6d. Save context string for the Upload script
+            clip_text = " ".join([w.text for w in all_words if clip_start <= w.start <= clip_end])
+            context_data = {
+                "video_source": str(video_path.name),
+                "score": sc.score,
+                "hook": hook_text or "",
+                "transcript": clip_text,
+                "language": config.language
+            }
+            json_path = config.output_dir / f"{stem}_short{i:02d}.json"
+            with open(json_path, "w", encoding="utf-8") as jf:
+                json.dump(context_data, jf, indent=2, ensure_ascii=False)
 
     # ── Summary ────────────────────────────────────────────────
     elapsed = time.time() - t0

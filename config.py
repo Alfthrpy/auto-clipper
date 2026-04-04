@@ -53,6 +53,11 @@ class Config:
     hook_voice_id: str = "en-US-ChristopherNeural" # Bahasa Indonesia male. Use "en-US-ChristopherNeural" for EN.
     hook_ducking_volume: float = 0.2        # Volume of original video while TTS is playing
     
+    # -- YouTube Auto-Upload (Phase 3) --
+    upload_enabled: bool = False
+    youtube_privacy_status: str = "public" # "public", "unlisted", or "private"
+    youtube_category_id: str = "22" # 22 = People & Blogs, 27 = Education
+    
     # -- Paths --
     output_dir: Path = field(default_factory=lambda: Path("output"))
     temp_dir: Path = field(default_factory=lambda: Path("temp"))
