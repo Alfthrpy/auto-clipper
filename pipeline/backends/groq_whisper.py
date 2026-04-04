@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from config import Config
-from pipeline.transcriber import Segment
+from pipeline.transcriber import Segment, Word
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -54,7 +54,7 @@ def transcribe_groq(audio_path: str, config: Config) -> list[Segment]:
             model="whisper-large-v3",
             response_format="verbose_json",
             language=config.language,
-            timestamp_granularities=["segment"],
+            timestamp_granularities=["segment", "word"],
         )
 
     segments = _parse_response(response)
@@ -120,7 +120,7 @@ def _transcribe_chunked(client, audio_path: str, config: Config) -> list[Segment
                     model="whisper-large-v3",
                     response_format="verbose_json",
                     language=config.language,
-                    timestamp_granularities=["segment"],
+                    timestamp_granularities=["segment", "word"],
                 )
 
             # Adjust timestamps by offset
@@ -139,8 +139,22 @@ def _transcribe_chunked(client, audio_path: str, config: Config) -> list[Segment
 
 
 def _parse_response(response) -> list[Segment]:
-    """Parse Groq API response into Segment list."""
+    """Parse Groq API response into Segment list with word timestamps."""
     segments: list[Segment] = []
+
+    # Parse word-level data (flat list from API)
+    all_words: list[Word] = []
+    if hasattr(response, "words") and response.words:
+        for w in response.words:
+            word_text = w.get("word", "").strip() if isinstance(w, dict) else getattr(w, "word", "").strip()
+            w_start = w.get("start", 0) if isinstance(w, dict) else getattr(w, "start", 0)
+            w_end = w.get("end", 0) if isinstance(w, dict) else getattr(w, "end", 0)
+            if word_text:
+                all_words.append(Word(
+                    start=round(float(w_start), 2),
+                    end=round(float(w_end), 2),
+                    text=word_text,
+                ))
 
     if hasattr(response, "segments") and response.segments:
         for seg in response.segments:
@@ -148,10 +162,18 @@ def _parse_response(response) -> list[Segment]:
             start = seg.get("start", 0) if isinstance(seg, dict) else getattr(seg, "start", 0)
             end = seg.get("end", 0) if isinstance(seg, dict) else getattr(seg, "end", 0)
             if text:
+                seg_start = round(float(start), 2)
+                seg_end = round(float(end), 2)
+                # Match words to this segment by time range
+                seg_words = [
+                    w for w in all_words
+                    if w.start >= seg_start - 0.05 and w.end <= seg_end + 0.05
+                ] or None
                 segments.append(Segment(
-                    start=round(float(start), 2),
-                    end=round(float(end), 2),
+                    start=seg_start,
+                    end=seg_end,
                     text=text,
+                    words=seg_words,
                 ))
 
     return segments

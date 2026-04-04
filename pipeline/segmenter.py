@@ -57,11 +57,14 @@ def merge_segments(segments: list[Segment], config: Config) -> list[Chunk]:
         gap = seg.start - current_end if i > 0 else 0
         chunk_duration = seg.end - current_start
 
+        # Current chunk duration before adding this segment
+        current_chunk_duration = current_end - current_start
+
         # Split conditions
-        should_split = (
-            chunk_duration > config.max_chunk_duration
-            or gap > config.silence_gap_threshold
-        )
+        hit_max = (seg.end - current_start) > config.max_chunk_duration
+        hit_gap_and_long_enough = (gap > config.silence_gap_threshold) and (current_chunk_duration >= config.min_chunk_duration)
+
+        should_split = hit_max or hit_gap_and_long_enough
 
         if should_split and current_texts:
             flush()

@@ -7,9 +7,17 @@ Supported backends:
 
 All backends return the same list[Segment] with timestamps.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from config import Config
+
+
+@dataclass
+class Word:
+    """A single word with timestamps."""
+    start: float   # seconds
+    end: float     # seconds
+    text: str
 
 
 @dataclass
@@ -18,6 +26,7 @@ class Segment:
     start: float   # seconds
     end: float     # seconds
     text: str
+    words: list[Word] | None = field(default=None, repr=False)
 
 
 def transcribe(audio_path: str, config: Config) -> list[Segment]:

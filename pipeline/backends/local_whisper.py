@@ -15,7 +15,7 @@ import imageio_ffmpeg
 from faster_whisper import WhisperModel
 
 from config import Config
-from pipeline.transcriber import Segment
+from pipeline.transcriber import Segment, Word
 
 logger = logging.getLogger(__name__)
 
@@ -223,14 +223,29 @@ def transcribe_local(audio_path: str, config: Config) -> list[Segment]:
                     language=config.language,
                     vad_filter=True,
                     vad_parameters=dict(min_silence_duration_ms=500),
+                    word_timestamps=True,
                 )
 
                 chunk_count = 0
                 for seg in raw_segments:  # exhaust generator segera
+                    # Parse word-level timestamps
+                    words = None
+                    if seg.words:
+                        words = [
+                            Word(
+                                start=round(w.start + offset, 2),
+                                end=round(w.end + offset, 2),
+                                text=w.word.strip(),
+                            )
+                            for w in seg.words
+                            if w.word.strip()
+                        ]
+
                     all_segments.append(Segment(
                         start=round(seg.start + offset, 2),
                         end=round(seg.end + offset, 2),
                         text=seg.text.strip(),
+                        words=words,
                     ))
                     chunk_count += 1
 
