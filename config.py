@@ -19,17 +19,19 @@ class Config:
 
     # -- Segmentation --
     min_chunk_duration: float = 20.0   # seconds – minimum chunk length
-    max_chunk_duration: float = 30.0   # seconds – maximum chunk length
+    max_chunk_duration: float = 35.0   # seconds – maximum chunk length
     silence_gap_threshold: float = 2.0 # seconds – gap to trigger split
     chunk_duration_seconds: float = 300.0 # seconds – chunk duration
 
     # -- Scoring --
-    scoring_mode: str = "fused"    # "tfidf" | "audio" | "fused"
-    audio_weight: float = 0.5     # for fused mode: 0.0 = all text, 1.0 = all audio
+    scoring_mode: str = "fused"    # "tfidf" | "audio" | "llm" | "fused"
+    audio_weight: float = 0.3      # for fused mode
+    semantic_weight: float = 0.5   # for fused mode (value meaning it's highly prioritized)
+    semantic_pre_filter_top_n: int = 40  # Max chunks to send to LLM (for long videos to save rate limit)
     top_k: int = 5  # number of clips to extract
 
     # -- Clipping --
-    clip_padding: float = 2.0  # seconds of padding before/after clip
+    clip_padding: float = 3.0  # seconds of padding before/after clip
 
     # -- Subtitle --
     subtitle_font: str = "Arial Black"

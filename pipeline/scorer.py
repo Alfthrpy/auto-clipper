@@ -7,6 +7,7 @@ Supports three modes:
   - "fused"  → weighted combination of text + audio (recommended)
 """
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -14,6 +15,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from config import Config
 from pipeline.segmenter import Chunk
+from pipeline.audio_scorer import score_audio
+from pipeline.semantic_scorer import score_semantic_llm
 
 
 @dataclass
@@ -59,61 +62,73 @@ def _score_tfidf(chunks: list[Chunk]) -> np.ndarray:
 
 def score_chunks(
     chunks: list[Chunk],
-    config: Config,
-    audio_path: str | None = None,
+    video_path: Path,
+    config: Config
 ) -> list[ScoredChunk]:
-    """
-    Score chunks using the configured scoring mode.
-
-    Args:
-        chunks:     List of text chunks to score.
-        config:     Pipeline configuration (uses scoring_mode, audio_weight).
-        audio_path: Path to WAV file (required for 'audio' and 'fused' modes).
-
-    Returns:
-        List of ScoredChunk sorted by score descending.
-    """
+    """Score chunks based on the configured mode."""
     if not chunks:
         return []
 
-    mode = config.scoring_mode
-    scores: np.ndarray
+    # Prepare individual dimension arrays
+    tfidf_scores = np.zeros(len(chunks))
+    audio_scores = np.zeros(len(chunks))
+    llm_scores = np.zeros(len(chunks))
 
-    if mode == "tfidf":
-        print("[score] Mode: tfidf (text-only)")
-        scores = _score_tfidf(chunks)
+    # Calculate TF-IDF
+    if config.scoring_mode in ["tfidf", "fused"]:
+        tfidf_scores = _score_tfidf(chunks)
 
-    elif mode == "audio":
-        print("[score] Mode: audio (energy/pitch only)")
-        if not audio_path:
-            raise ValueError("audio_path is required for 'audio' scoring mode")
-        from pipeline.audio_scorer import score_audio
-        scores = score_audio(audio_path, chunks)
+    # Calculate Audio
+    if config.scoring_mode in ["audio", "fused"]:
+        audio_scores = score_audio(chunks, video_path)
+        
+    # Calculate Semantic / LLM
+    if config.scoring_mode in ["llm", "fused"]:
+        # Pre-filter logic to save token limits if total chunks > top_n limit
+        if len(chunks) > config.semantic_pre_filter_top_n:
+            # Create a simple rough draft score using TF-IDF and Audio to prune
+            rough_scores = tfidf_scores * (1 - config.audio_weight) + audio_scores * config.audio_weight
+            if rough_scores.sum() == 0:
+                # Fallback if both were not calculated
+                rough_scores = _score_tfidf(chunks)
+                
+            top_indices = np.argsort(rough_scores)[-config.semantic_pre_filter_top_n:]
+            # Send only the top N to LLM
+            filtered_chunks = [chunks[i] for i in sorted(top_indices)]
+            f_llm_scores = score_semantic_llm(filtered_chunks, config)
+            
+            # Map back to full length array
+            for f_idx, orig_idx in enumerate(sorted(top_indices)):
+                llm_scores[orig_idx] = f_llm_scores[f_idx]
+        else:
+            # Score all chunks
+            llm_scores = score_semantic_llm(chunks, config)
 
-    elif mode == "fused":
-        print(f"[score] Mode: fused (text={1 - config.audio_weight:.0%} + "
-              f"audio={config.audio_weight:.0%})")
-        if not audio_path:
-            raise ValueError("audio_path is required for 'fused' scoring mode")
+    # --- Fusion & Mapping ---
+    result = []
+    
+    # Pre-calculate factors for fused
+    w_aud = config.audio_weight
+    w_sem = config.semantic_weight
+    # tfidf weight is whatever is left over
+    w_tfidf = max(0.0, 1.0 - w_aud - w_sem)
 
-        text_scores = _score_tfidf(chunks)
-        from pipeline.audio_scorer import score_audio
-        audio_scores = score_audio(audio_path, chunks)
+    for i, chunk in enumerate(chunks):
+        if config.scoring_mode == "fused":
+            # Example blend: 30% audio, 50% semantic, 20% tfidf
+            final_score = (
+                tfidf_scores[i] * w_tfidf +
+                audio_scores[i] * w_aud +
+                llm_scores[i] * w_sem
+            )
+        elif config.scoring_mode == "audio":
+            final_score = audio_scores[i]
+        elif config.scoring_mode == "llm":
+            final_score = llm_scores[i]
+        else:
+            final_score = tfidf_scores[i]
 
-        w = config.audio_weight
-        scores = (1 - w) * text_scores + w * audio_scores
+        result.append(ScoredChunk(chunk=chunk, score=final_score))
 
-    else:
-        raise ValueError(f"Unknown scoring mode: '{mode}'. Use: tfidf, audio, fused")
-
-    # Build sorted results
-    scored = [
-        ScoredChunk(chunk=c, score=round(float(s), 4))
-        for c, s in zip(chunks, scores)
-    ]
-    scored.sort(key=lambda x: x.score, reverse=True)
-
-    print(f"[score] Scored {len(scored)} chunks  "
-          f"(top={scored[0].score:.3f}, bottom={scored[-1].score:.3f})")
-
-    return scored
+    result.sort(key=lambda x: x.score, reverse=True)
+    return result

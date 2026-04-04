@@ -86,9 +86,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--scoring", "-s",
-        type=str,
+        choices=["tfidf", "audio", "llm", "fused"],
         default="fused",
-        choices=["tfidf", "audio", "fused"],
         help="Scoring mode. Default: fused.",
     )
     p.add_argument(
@@ -252,8 +251,16 @@ def main():
         preview = clean_text[:80] + "..." if len(clean_text) > 80 else clean_text
         print(f"  {i:2d}. [{c.start:6.1f}s → {c.end:6.1f}s] {preview}")
 
-    # ── Step 4: Score ──────────────────────────────────────────
-    scored = score_chunks(chunks, config, audio_path=str(audio_path))
+    # 4. Score chunks
+    print("\n[score] Scoring & ranking chunks...")
+    # Note: audio_path string represents the path to .wav
+    scored = score_chunks(chunks, audio_path, config)
+    
+    # Optional debug output for semantic mode
+    if config.scoring_mode in ["llm", "fused"]:
+        print("\n[score] Semantic Top 3 evaluation:")
+        for sc in scored[:3]:
+            print(f"  ↳ [{sc.score:.3f}] {sc.chunk.text[:60]}...")
 
     print("\n── Highlight Scores ──────────────────────────────────")
     for i, sc in enumerate(scored, 1):
