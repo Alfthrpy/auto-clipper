@@ -14,9 +14,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from config import Config
-from pipeline.segmenter import Chunk
-from pipeline.audio_scorer import score_audio
-from pipeline.semantic_scorer import score_semantic_llm
+from pipeline.processor.segmenter import Chunk
+from pipeline.scorer.audio_scorer import score_audio
+from pipeline.scorer.semantic_scorer import score_semantic_llm
 
 
 @dataclass

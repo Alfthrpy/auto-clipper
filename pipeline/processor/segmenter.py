@@ -5,7 +5,7 @@ suitable for scoring.
 from dataclasses import dataclass
 
 from config import Config
-from pipeline.transcriber import Segment
+from pipeline.processor.transcriber import Segment
 
 
 @dataclass

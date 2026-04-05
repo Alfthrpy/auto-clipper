@@ -15,7 +15,7 @@ import imageio_ffmpeg
 from faster_whisper import WhisperModel
 
 from config import Config
-from pipeline.transcriber import Segment, Word
+from pipeline.processor.transcriber import Segment, Word
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from config import Config
-from pipeline.transcriber import Segment, Word
+from pipeline.processor.transcriber import Segment, Word
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -125,10 +125,20 @@ def _transcribe_chunked(client, audio_path: str, config: Config) -> list[Segment
 
             # Adjust timestamps by offset
             for seg in _parse_response(response):
+                adjusted_words = None
+                if seg.words:
+                    adjusted_words = [
+                        Word(
+                            start=round(w.start + offset, 2),
+                            end=round(w.end + offset, 2),
+                            text=w.text
+                        ) for w in seg.words
+                    ]
                 all_segments.append(Segment(
                     start=round(seg.start + offset, 2),
                     end=round(seg.end + offset, 2),
                     text=seg.text,
+                    words=adjusted_words,
                 ))
 
             offset += chunk_duration

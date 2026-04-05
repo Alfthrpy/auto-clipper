@@ -57,15 +57,24 @@ class Config:
     upload_enabled: bool = False
     youtube_privacy_status: str = "public" # "public", "unlisted", or "private"
     youtube_category_id: str = "22" # 22 = People & Blogs, 27 = Education
+    # -- Downloader --
+    download_resolution: str = "1080p" # e.g. "1080p", "720p", "highest"
     
     # -- Paths --
     output_dir: Path = field(default_factory=lambda: Path("output"))
     temp_dir: Path = field(default_factory=lambda: Path("temp"))
     cache_dir: Path = field(default_factory=lambda: Path("models"))  # model cache
+    transcribe_dir : Path = field(default_factory=lambda: Path("temp/transcribe"))
+    subs_dir : Path = field(default_factory=lambda: Path("temp/subs"))
+    vid_dir : Path = field(default_factory=lambda: Path("temp/vid"))
 
     def ensure_dirs(self):
         """Create output, temp, and cache directories if they don't exist."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.transcribe_dir.mkdir(parents=True, exist_ok=True)
+        self.subs_dir.mkdir(parents=True, exist_ok=True)
+        self.vid_dir.mkdir(parents=True, exist_ok=True)
+
 

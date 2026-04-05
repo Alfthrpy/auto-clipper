@@ -14,14 +14,14 @@ import time
 from pathlib import Path
 
 from config import Config
-from pipeline.audio_extractor import extract_audio
-from pipeline.transcriber import transcribe, Segment, Word
-from pipeline.segmenter import merge_segments
-from pipeline.scorer import score_chunks
-from pipeline.clipper import select_top_clips, extract_clips
-from pipeline.subtitle_generator import generate_subtitle_for_clip, generate_hook_ass
-from pipeline.renderer import render_vertical_clip, _get_audio_duration
-from pipeline.hook_generator import generate_hook_text, generate_hook_audio
+from pipeline.processor.audio_extractor import extract_audio
+from pipeline.processor.transcriber import transcribe, Segment, Word
+from pipeline.processor.segmenter import merge_segments
+from pipeline.scorer.scorer import score_chunks
+from pipeline.processor.clipper import select_top_clips, extract_clips
+from pipeline.generator.subtitle_generator import generate_subtitle_for_clip, generate_hook_ass
+from pipeline.processor.renderer import render_vertical_clip, _get_audio_duration
+from pipeline.generator.hook_generator import generate_hook_text, generate_hook_audio
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -222,7 +222,7 @@ def main():
     extract_audio(video_path, audio_path)
 
     # ── Step 2: Transcribe (with caching) ──────────────────────
-    cache_file = config.temp_dir / _cache_key(video_path, config)
+    cache_file = config.transcribe_dir / _cache_key(video_path, config)
     segments = _load_cached_segments(cache_file)
 
     if segments is None:
@@ -288,7 +288,7 @@ def main():
             clip_end = sc.chunk.end + config.clip_padding
 
             # 6a. Generate subtitle
-            sub_path = config.temp_dir / f"{stem}_clip{i:02d}.ass"
+            sub_path = config.subs_dir / f"{stem}_clip{i:02d}.ass"
             subtitle_file = None
             if all_words:
                 subtitle_file = generate_subtitle_for_clip(
@@ -305,7 +305,7 @@ def main():
                 hook_text = generate_hook_text(clip_text_preview, config.groq_api_key, config.language)
                 
                 if hook_text:
-                    hook_audio_file = config.temp_dir / f"{stem}_clip{i:02d}_hook.mp3"
+                    hook_audio_file = config.subs_dir / f"{stem}_clip{i:02d}_hook.mp3"
                     generate_hook_audio(hook_text, hook_audio_file, config.hook_voice_id)
                     
                     # Cek durasi voice over menggunakan probe fungsi _get_audio_duration

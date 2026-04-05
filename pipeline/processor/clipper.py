@@ -8,7 +8,7 @@ from pathlib import Path
 import imageio_ffmpeg
 
 from config import Config
-from pipeline.scorer import ScoredChunk
+from pipeline.scorer.scorer import ScoredChunk
 
 
 def get_ffmpeg() -> str:

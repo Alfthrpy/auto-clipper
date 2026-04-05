@@ -10,7 +10,7 @@ import numpy as np
 from groq import Groq, RateLimitError, InternalServerError, APIConnectionError
 
 from config import Config
-from pipeline.segmenter import Chunk
+from pipeline.processor.segmenter import Chunk
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from pathlib import Path
 import pysubs2
 
 from config import Config
-from pipeline.transcriber import Word
+from pipeline.processor.transcriber import Word
 
 
 # Words that get UPPERCASED for emphasis

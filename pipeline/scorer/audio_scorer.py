@@ -10,7 +10,7 @@ Extracts per-chunk scores from:
 import numpy as np
 import librosa
 
-from pipeline.segmenter import Chunk
+from pipeline.processor.segmenter import Chunk
 
 
 def _normalize(arr: np.ndarray) -> np.ndarray:
