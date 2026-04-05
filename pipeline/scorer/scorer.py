@@ -62,7 +62,7 @@ def _score_tfidf(chunks: list[Chunk]) -> np.ndarray:
 
 def score_chunks(
     chunks: list[Chunk],
-    video_path: Path,
+    audio_path: Path,
     config: Config
 ) -> list[ScoredChunk]:
     """Score chunks based on the configured mode."""
@@ -80,7 +80,7 @@ def score_chunks(
 
     # Calculate Audio
     if config.scoring_mode in ["audio", "fused"]:
-        audio_scores = score_audio(chunks, video_path)
+        audio_scores = score_audio(str(audio_path), chunks)
         
     # Calculate Semantic / LLM
     if config.scoring_mode in ["llm", "fused"]:

@@ -1,6 +1,6 @@
 """
 Metadata Generator — YouTube Shorts Title, Description, and Tags.
-Niche-tuned for Money / Business / Smart Financial Insight content.
+Niche-adaptive using ContentProfile for tone, audience, and style context.
 Uses JSON Mode on Groq API.
 """
 import json
@@ -10,6 +10,7 @@ import time
 from groq import Groq, RateLimitError
 
 from config import Config
+from pipeline.content_profiles import get_profile
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Tone and Anti-AI Instructions
 # ---------------------------------------------------------------------------
-ANTI_AI_INSTRUCTIONS = """
+ANTI_AI_INSTRUCTIONS = """\
 TONE & STYLE (CRITICAL):
 - Write like a real, experienced human YouTuber. Be raw, conversational, and direct.
 - DO NOT sound like a corporate robot or an AI.
@@ -28,46 +29,42 @@ TONE & STYLE (CRITICAL):
 """
 
 # ---------------------------------------------------------------------------
-# Title patterns - Humanized and raw
+# Title patterns — niche-adaptive
 # ---------------------------------------------------------------------------
-TITLE_PATTERNS = """
+TITLE_PATTERNS = """\
 Choose ONE of these proven title patterns. Adapt the meaning into the target language using a casual, human tone:
 
   A) CONTRARIAN STATEMENT
-     Pattern: "[Common belief] is actually [making you poor/a scam]"
-     (e.g., "Nabung di bank itu aslinya bikin miskin")
+     Pattern: "[Common belief] is actually [wrong/harmful/a scam]"
   
   B) HIDDEN MECHANISM
-     Pattern: "How [Banks/System] actually make money off you"
-     (e.g., "Cara bank muterin uang gaji lo tiap bulan")
+     Pattern: "How [System/Institution] actually [works against you]"
   
   C) CURIOSITY GAP (Punchy & Short)
-     Pattern: "Why you should never [do normal financial thing]"
-     (e.g., "Kenapa gue stop nabung buat dana darurat")
+     Pattern: "Why you should never [do commonly accepted thing]"
   
   D) BLUNT TRUTH
      Pattern: "The brutal truth about [Topic]"
-     (e.g., "Realita pahit soal passive income")
 """
 
 # ---------------------------------------------------------------------------
 # Tag taxonomy
 # ---------------------------------------------------------------------------
-TAG_STRATEGY = """
+TAG_STRATEGY = """\
 Generate exactly 15 tags using this layered SEO strategy, translated to the target language:
 
-  BROAD (3 tags) — generic terms (e.g., uang, finansial).
+  BROAD (3 tags) — generic terms related to the niche.
   MID-TIER (5 tags) — topic-specific terms matching the clip content.
-  LONG-TAIL (4 tags) — 3-5 word phrases, conversational (e.g., "cara ngatur duit gaji").
-  NICHE VIRAL (3 tags) — trending terms.
+  LONG-TAIL (4 tags) — 3-5 word phrases, conversational.
+  NICHE VIRAL (3 tags) — trending terms in this niche.
 
 Return tags as a flat JSON array of strings. No hashtag symbols (#).
 """
 
 # ---------------------------------------------------------------------------
-# Description structure - Casual and brief
+# Description structure
 # ---------------------------------------------------------------------------
-DESCRIPTION_STRUCTURE = """
+DESCRIPTION_STRUCTURE = """\
 Write the description in this exact structure, translated to the target language:
 
   LINE 1 — THE HOOK (1 sentence):
@@ -83,15 +80,20 @@ Write the description in this exact structure, translated to the target language
     Keep it minimal. 2 content hashtags + #Shorts.
 """
 
-def _build_prompts(clip_text: str, lang_instruction: str) -> tuple[str, str]:
-    """Build (system_prompt, user_prompt) pair."""
+def _build_prompts(clip_text: str, lang_instruction: str, config: Config) -> tuple[str, str]:
+    """Build (system_prompt, user_prompt) pair using the active content profile."""
+    profile = get_profile(config.content_niche)
+
     system_prompt = (
-        "You are an elite YouTube Shorts SEO strategist specializing in "
-        "Money and Business content. You know how to write viral metadata that feels 100% human.\n\n"
-        "You MUST respond ONLY with a valid JSON object. No markdown, no extra keys.\n\n"
+        f"You are an elite YouTube Shorts SEO strategist specializing in "
+        f"{profile.label} content. You know how to write viral metadata that feels 100% human.\n\n"
+        f"You MUST respond ONLY with a valid JSON object. No markdown, no extra keys.\n\n"
         f"CRITICAL LANGUAGE RULE:\n"
         f"You MUST write ALL output fields entirely in {lang_instruction}. "
         f"Use natural, conversational, and slightly informal phrasing native to that language.\n\n"
+        f"NICHE CONTEXT:\n"
+        f"- Target audience: {profile.audience}\n"
+        f"- Content tone: {profile.tone}\n\n"
         + ANTI_AI_INSTRUCTIONS
         + "\n--- TITLE INSTRUCTIONS ---\n"
         + TITLE_PATTERNS
@@ -114,11 +116,22 @@ def _build_prompts(clip_text: str, lang_instruction: str) -> tuple[str, str]:
     return system_prompt, user_prompt
 
 
-def _validate_metadata(metadata: dict) -> dict:
+def _validate_metadata(raw_text: str) -> dict:
     """
     Validate and sanitize LLM output.
     Returns cleaned metadata or raises ValueError if critically malformed.
     """
+    text = raw_text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+    
+    metadata = json.loads(text)
+    
     required_keys = {"title", "description", "tags"}
     if not required_keys.issubset(metadata.keys()):
         missing = required_keys - metadata.keys()
@@ -153,6 +166,7 @@ def generate_youtube_metadata(
 ) -> dict:
     """
     Generate YouTube Shorts metadata (title, description, tags) from a clip transcript.
+    Uses the active content profile for niche-appropriate tone and style.
     """
     api_key = config.groq_api_key or os.environ.get("GROQ_API_KEY")
     if not api_key:
@@ -166,10 +180,10 @@ def generate_youtube_metadata(
     # Define language clearly
     lang_instruction = "English" if getattr(config, "language", "id") == "en" else "Indonesian (Bahasa Indonesia - gunakan gaya bahasa kasual, sedikit santai, bukan bahasa baku formal)"
     
-    model_name = getattr(config, "metadata_model", None) or getattr(config, "semantic_model", "llama-3.1-8b-instant")
+    model_name = getattr(config, "metadata_model", None) or getattr(config, "semantic_model", "") or "llama-3.1-8b-instant"
 
     client = Groq(api_key=api_key)
-    system_prompt, user_prompt = _build_prompts(clip_text, lang_instruction)
+    system_prompt, user_prompt = _build_prompts(clip_text, lang_instruction, config)
 
     delay = 2.0
     for attempt in range(max_retries):
@@ -180,14 +194,13 @@ def generate_youtube_metadata(
                     {"role": "user",   "content": user_prompt},
                 ],
                 model=model_name,
-                temperature=0.7, # Sedikit diturunkan agar tidak terlalu "halu" dan tetap sesuai struktur
+                temperature=0.7,
                 max_tokens=800,
                 response_format={"type": "json_object"},
             )
 
             raw = response.choices[0].message.content
-            metadata = json.loads(raw)
-            metadata = _validate_metadata(metadata)
+            metadata = _validate_metadata(raw)
 
             logger.info(
                 f"[metadata] ✓ Title: '{metadata['title']}' | "

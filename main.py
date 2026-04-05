@@ -9,6 +9,8 @@ Usage:
 """
 import argparse
 import json
+
+from pipeline.content_profiles import list_profiles
 import sys
 import time
 from pathlib import Path
@@ -95,6 +97,34 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.5,
         help="Audio weight in fused mode (0.0=all text, 1.0=all audio). Default: 0.5.",
+    )
+    # ── Content profile ──
+    p.add_argument(
+        "--niche",
+        type=str,
+        default="money",
+        choices=list_profiles(),
+        help=f"Content niche profile. Choices: {', '.join(list_profiles())}. Default: money.",
+    )
+    # ── Semantic scorer backend ──
+    p.add_argument(
+        "--semantic-backend",
+        type=str,
+        default="groq",
+        choices=["groq", "gemini"],
+        help="LLM backend for semantic scoring. Default: groq.",
+    )
+    p.add_argument(
+        "--gemini-api-key",
+        type=str,
+        default=None,
+        help="Google Gemini API key (or set GEMINI_API_KEY env var).",
+    )
+    p.add_argument(
+        "--semantic-model",
+        type=str,
+        default="",
+        help="Override model name for semantic scorer. Auto-selected per backend if empty.",
     )
     # ── Render flags ──
     p.add_argument(
@@ -186,6 +216,10 @@ def main():
         whisper_device=args.device,
         scoring_mode=args.scoring,
         audio_weight=args.audio_weight,
+        content_niche=args.niche,
+        semantic_backend=args.semantic_backend,
+        semantic_model=args.semantic_model,
+        gemini_api_key=args.gemini_api_key,
         top_k=args.top,
         language=args.language,
         output_dir=Path(args.output),
@@ -198,15 +232,24 @@ def main():
 
     render_label = "ON (vertical + subtitle)" if config.render_enabled else "OFF (raw clips)"
     hook_label = f"ON ({config.hook_voice_id})" if config.hook_enabled else "OFF"
+    sem_label = f"{config.semantic_backend.upper()}"
+    if config.semantic_model:
+        sem_label += f" ({config.semantic_model})"
+
+    from pipeline.content_profiles import get_profile
+    niche_profile = get_profile(config.content_niche)
 
     print("=" * 60)
     print(f"  Auto-Clipper")
     print(f"  Video  : {video_path.name}")
+    print(f"  Niche  : {niche_profile.label}")
     print(f"  Backend: {config.transcribe_backend}")
     if config.transcribe_backend == "local":
         print(f"  Model  : {config.whisper_model}")
         print(f"  Device : {config.whisper_device}")
     print(f"  Scoring: {config.scoring_mode}")
+    if config.scoring_mode in ["llm", "fused"]:
+        print(f"  Sem.LLM: {sem_label}")
     if config.scoring_mode in ["fused", "audio", "tfidf"]:
         print(f"  Weights: text={1 - config.audio_weight:.0%} / audio={config.audio_weight:.0%}")
     print(f"  Top-K  : {config.top_k}")
@@ -302,7 +345,10 @@ def main():
             if config.hook_enabled:
                 # Ambil sebagian teks saja untuk konteks ke LLM agar cepat
                 clip_text_preview = sc.chunk.text[:500] if len(sc.chunk.text) > 500 else sc.chunk.text
-                hook_text = generate_hook_text(clip_text_preview, config.groq_api_key, config.language)
+                hook_text = generate_hook_text(
+                    clip_text_preview, config.groq_api_key, config.language,
+                    content_niche=config.content_niche,
+                )
                 
                 if hook_text:
                     hook_audio_file = config.subs_dir / f"{stem}_clip{i:02d}_hook.mp3"

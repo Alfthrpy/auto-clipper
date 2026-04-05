@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from config import Config
-from pipeline.metadata_generator import generate_youtube_metadata
+from pipeline.generator.metadata_generator import generate_youtube_metadata
 from pipeline.uploader import upload_to_youtube
 
 

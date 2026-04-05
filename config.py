@@ -23,11 +23,17 @@ class Config:
     silence_gap_threshold: float = 2.0 # seconds – gap to trigger split
     chunk_duration_seconds: float = 300.0 # seconds – chunk duration
 
+    # -- Content Profile (Personalization) --
+    content_niche: str = "money"   # "money" | "tech" | "gaming" | "self_improvement" | "ekonomi_politik"
+
     # -- Scoring --
     scoring_mode: str = "fused"    # "tfidf" | "audio" | "llm" | "fused"
     audio_weight: float = 0.3      # for fused mode
     semantic_weight: float = 0.5   # for fused mode (value meaning it's highly prioritized)
     semantic_pre_filter_top_n: int = 40  # Max chunks to send to LLM (for long videos to save rate limit)
+    semantic_backend: str = "groq"     # "groq" | "gemini"
+    semantic_model: str = ""           # auto-selected per backend if empty
+    gemini_api_key: str | None = None  # only needed for semantic_backend="gemini"
     top_k: int = 5  # number of clips to extract
 
     # -- Clipping --
